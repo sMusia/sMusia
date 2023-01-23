@@ -1,0 +1,28 @@
+{
+	"folders": [
+		{
+			"path": "BED_light"
+		},
+		{
+			"path": "Smart Socket"
+		},
+		{
+			"name": "RUM_robot",
+			"path": "RUM_robot"
+		},
+		{
+			"name": "smart_HOOKAN",
+			"path": "smart_HOOKAN"
+		},
+		{
+			"path": "111"
+		},
+		{
+			"path": "esp32cam"
+		},
+		{
+			"path": "esp32cam+"
+		}
+	],
+	"settings": {}
+}

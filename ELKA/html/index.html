@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<TITLE>BED Light55</TITLE>
+	<style>
+		body {margin:0;padding:0;font: 12px Tahoma; background: #393939; color:#B1B1B1;}
+		.header{
+		background: #595959;
+		display: grid;
+		grid-auto-columns: auto;
+		grid-template-columns: 4fr 2fr 1fr;
+		padding: 5px;
+		}
+		.header div:not(:first-child){
+			border-left:1px solid #787878;
+			padding-left: 8px;
+		}
+		a.button {
+			padding: 20px;
+			background: #464646;
+			border: 1px solid #929292;
+			border-radius: 8px;
+			margin-left: 10px;
+			text-align: center;
+			font-size: 32px;
+			color: #B1B1B1;
+			text-decoration: none;
+		}
+
+		a.button:last-child,a.button_mini:last-child {
+			margin-right: 10px;
+		}
+		.but_row1 {
+			display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            margin-top: 50px;}
+		.but_row2 {
+    margin: 10px 0 10px;
+    display: grid;
+}
+		.but_row3 {
+    display: grid;
+    padding-left: 10px;
+    grid-template-columns: 4fr 1fr;
+}
+		.but_row4 {}
+		.button_mini{
+    padding: 10px;
+    background: #464646;
+    border: 1px solid #929292;
+    border-radius: 8px;
+    margin-left: 10px;
+    text-align: center;
+    font-size: 14px;
+    color: #B1B1B1;
+    text-decoration: none;
+    display: block;
+    white-space: nowrap;
+}.but_row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    margin: 10px 0;
+}hr{	
+    margin: 20px 10px;
+    border-color: #787878;
+} 
+	</style>
+	<script type="text/javascript">
+		function openUrl(url) {
+		  var request = new XMLHttpRequest();
+		  request.open('GET', url, true);
+		  request.send(null);
+		}
+		function refreshData() {
+			var request = new XMLHttpRequest();
+			request.open('GET', '/data', true);
+			request.onreadystatechange = function() {
+				if (request.readyState == 4) {
+				var data = JSON.parse(request.responseText);
+				document.getElementById('cur_mode').innerHTML = data.cur_mode;
+				}
+      		}
+      		request.send(null);
+    	}
+    	setInterval(refreshData, 500);
+	</script>
+</head>
+<body>
+<div class="header"><div>BED Light - test version</div><div id="cur_mode">mode: 6</div><div>online</div></div>
+<div class="but_row1">
+    <a href="#" class="button"  onclick="openUrl('/switch?mode=L')">L</a><a href="#" class="button"  onclick="openUrl('/switch?mode=OFF')">OFF</a><a href="#" class="button" onclick="openUrl('/switch?mode=R')">R</a>
+</div>
+<div class="but_row2">
+    <a href="#" class="button"  onclick="openUrl('/switch?mode=MAX')">MAX</a>
+</div>
+<span style="padding-left:10px;">BRIGHTNESS</span>
+<div class="but_row3">
+
+      <input type="range" id="bright" name="bright"  min="0" max="255"  onchange="openUrl('/switch?bright='+this.value)">
+      <a href="#" class="button_mini" onclick="openUrl('/switch?mode=night')">night mode</a>
+</div>
+<hr>
+<span style="padding-left:10px;">EFFECTS</span>
+<div class="but_row">
+    <a href="#" class="button_mini" onclick="openUrl('/switch?mode=fire')">fire</a>
+    <a href="#" class="button_mini" onclick="openUrl('/switch?mode=rainbow')">rainbow</a>
+    <a href="#" class="button_mini" onclick="openUrl('/switch?mode=too-too')">too-too</a>
+</div>
+<div class="but_row">
+    <a href="#" class="button_mini" onclick="openUrl('/switch?mode=mode1')">mode 1</a>
+    <a href="#" class="button_mini" onclick="openUrl('/switch?mode=mode2')">mode 2</a>
+    <a href="#" class="button_mini" onclick="openUrl('/switch?mode=mode3')">mode 3</a>
+</div>
+</body>
+</html>

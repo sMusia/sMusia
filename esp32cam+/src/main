@@ -1,0 +1,290 @@
+/*******************************************************************
+
+   A Telegram bot for taking a photo with an ESP32Cam
+
+   Parts used:
+   ESP32-CAM module* - http://s.click.aliexpress.com/e/bnXR1eYs
+
+    = Affiliate Links
+
+   Note:
+   - Make sure that you have either selected ESP32 Wrover Module,
+           or another board which has PSRAM enabled
+   - Choose "Huge App" partion scheme
+
+   Some of the camera code comes from Rui Santos:
+   https://randomnerdtutorials.com/esp32-cam-take-photo-save-microsd-card/
+
+   Written by Brian Lough
+    YouTube: https://www.youtube.com/brianlough
+    Tindie: https://www.tindie.com/stores/brianlough/
+    Twitter: https://twitter.com/witnessmenow
+*******************************************************************/
+
+// ----------------------------
+// Standard Libraries - Already Installed if you have ESP32 set up
+// ----------------------------
+
+#include <WiFi.h>
+#include <WiFiClientSecure.h>
+#include <UniversalTelegramBot.h>
+#include "esp_camera.h"
+#include <ArduinoJson.h>
+
+
+//------- Replace the following! ------
+
+//#define CAMERA_MODEL_WROVER_KIT
+//#define CAMERA_MODEL_ESP_EYE
+//#define CAMERA_MODEL_M5STACK_PSRAM
+//#define CAMERA_MODEL_M5STACK_WIDE
+#define CAMERA_MODEL_AI_THINKER
+#include "camera_pins.h"
+#include "camera_code.h"
+// Wifi network station credentials
+#define WIFI_SSID "MyNet"
+#define WIFI_PASSWORD "romashka"
+// Telegram BOT Token (Get from Botfather)
+String BOTtoken = "1078551337:AAES4abYeFYkbIvC3xJ-6LZW2aU6qihMSqY";
+String CHAT_ID = "333923630";
+
+#define FLASH_LED_PIN 4
+
+const unsigned long BOT_MTBS = 1000; // mean time between scan messages
+
+unsigned long bot_lasttime; // last time messages' scan has been done
+WiFiClientSecure clientTCP;
+UniversalTelegramBot bot(BOTtoken, clientTCP);
+
+//Checks for new messages every 1 second.
+int botRequestDelay = 1000;
+unsigned long lastTimeBotRan;
+
+bool flashState = LOW;
+bool sendPhoto = false; 
+
+camera_fb_t *fb = NULL;
+
+bool isMoreDataAvailable();
+byte *getNextBuffer();
+int getNextBufferLen();
+
+bool dataAvailable = false;
+
+String sendPhotoTelegram() {
+  const char* myDomain = "api.telegram.org";
+  String getAll = "";
+  String getBody = "";
+
+  camera_fb_t * fb = NULL;
+  fb = esp_camera_fb_get();  
+  if(!fb) {
+    Serial.println("Camera capture failed");
+    delay(1000);
+    ESP.restart();
+    return "Camera capture failed";
+  }  
+  
+  Serial.println("Connect to " + String(myDomain));
+
+
+  if (clientTCP.connect(myDomain, 443)) {
+    Serial.println("Connection successful");
+    
+        String head = "--RandomNerdTutorials\r\nContent-Disposition: form-data; name=\"chat_id\"; \r\n\r\n" + CHAT_ID + "\r\n--RandomNerdTutorials\r\nContent-Disposition: form-data; name=\"photo\"; filename=\"esp32-cam.jpg\"\r\nContent-Type: image/jpeg\r\n\r\n";
+    String tail = "\r\n--RandomNerdTutorials--\r\n";
+
+    uint16_t imageLen = fb->len;
+    uint16_t extraLen = head.length() + tail.length();
+    uint16_t totalLen = imageLen + extraLen;
+  
+    clientTCP.println("POST /bot"+BOTtoken+"/sendPhoto HTTP/1.1");
+    clientTCP.println("Host: " + String(myDomain));
+    clientTCP.println("Content-Length: " + String(totalLen));
+    clientTCP.println("Content-Type: multipart/form-data; boundary=RandomNerdTutorials");
+    clientTCP.println();
+    clientTCP.print(head);
+  
+    uint8_t *fbBuf = fb->buf;
+    size_t fbLen = fb->len;
+    for (size_t n=0;n<fbLen;n=n+1024) {
+      if (n+1024<fbLen) {
+        clientTCP.write(fbBuf, 1024);
+        fbBuf += 1024;
+      }
+      else if (fbLen%1024>0) {
+        size_t remainder = fbLen%1024;
+        clientTCP.write(fbBuf, remainder);
+      }
+    }  
+    
+    clientTCP.print(tail);
+    
+    esp_camera_fb_return(fb);
+    
+    int waitTime = 20000;   // timeout 10 seconds
+    long startTimer = millis();
+    boolean state = false;
+    
+    while ((startTimer + waitTime) > millis()){
+      Serial.print(".");
+      delay(100);      
+      while (clientTCP.available()) {
+        char c = clientTCP.read();
+        if (state==true) getBody += String(c);        
+        if (c == '\n') {
+          if (getAll.length()==0) state=true; 
+          getAll = "";
+        } 
+        else if (c != '\r')
+          getAll += String(c);
+        startTimer = millis();
+      }
+      if (getBody.length()>0) break;
+    }
+    clientTCP.stop();
+    Serial.println(getBody);
+  }
+  else {
+    getBody="Connected to api.telegram.org failed.";
+    Serial.println("Connected to api.telegram.org failed.");
+  }
+  return getBody;
+}
+
+
+void handleNewMessages(int numNewMessages)
+{
+  Serial.println("handleNewMessages");
+  Serial.println(String(numNewMessages));
+
+  for (int i = 0; i < numNewMessages; i++)
+  {
+    String chat_id = String(bot.messages[i].chat_id);
+    String text = bot.messages[i].text;
+
+    String from_name = bot.messages[i].from_name;
+    if (from_name == "")
+      from_name = "Guest";
+
+    if (text == "/flash")
+    {
+      flashState = !flashState;
+      digitalWrite(FLASH_LED_PIN, flashState);
+    }
+
+    if (text == "/photo") {
+      sendPhoto = true;
+      Serial.println("New photo request");
+    }
+
+    if (text == "/start")
+    {
+      String welcome = "Welcome to the ESP32Cam Telegram bot.\n\n";
+      welcome += "/photo : will take a photo\n";
+      welcome += "/flash : toggle flash LED (VERY BRIGHT!)\n";
+      bot.sendMessage(chat_id, welcome, "Markdown");
+    }
+  }
+}
+
+bool isMoreDataAvailable()
+{
+  if (dataAvailable)
+  {
+    dataAvailable = false;
+    return true;
+  }
+  else
+  {
+    return false;
+  }
+}
+
+byte *getNextBuffer()
+{
+  if (fb)
+  {
+    return fb->buf;
+  }
+  else
+  {
+    return nullptr;
+  }
+}
+
+int getNextBufferLen()
+{
+  if (fb)
+  {
+    return fb->len;
+  }
+  else
+  {
+    return 0;
+  }
+}
+
+void setup()
+{
+  Serial.begin(115200);
+  Serial.println();
+
+  pinMode(FLASH_LED_PIN, OUTPUT);
+  digitalWrite(FLASH_LED_PIN, flashState); //defaults to low
+
+  if (!setupCamera())
+  {
+    Serial.println("Camera Setup Failed!");
+    while (true)
+    {
+      delay(100);
+    }
+  }
+
+  // attempt to connect to Wifi network:
+  Serial.print("Connecting to Wifi SSID ");
+  Serial.print(WIFI_SSID);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  clientTCP.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
+  //secured_client.setCACert(TELEGRAM_CERTIFICATE_ROOT); // Add root certificate for api.telegram.org
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.print("\nWiFi connected. IP address: ");
+  Serial.println(WiFi.localIP());
+
+  Serial.print("Retrieving time: ");
+  configTime(0, 0, "pool.ntp.org"); // get UTC time via NTP
+  time_t now = time(nullptr);
+  while (now < 24 * 3600)
+  {
+    Serial.print(".");
+    delay(100);
+    now = time(nullptr);
+  }
+  Serial.println(now);
+
+  // Make the bot wait for a new message for up to 60seconds
+  bot.longPoll = 60;
+}
+
+void loop()
+{
+    if (sendPhoto) {
+    Serial.println("Preparing photo");
+    sendPhotoTelegram(); 
+    sendPhoto = false; 
+  }
+if (millis() > lastTimeBotRan + botRequestDelay)  {
+    int numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    while (numNewMessages) {
+      Serial.println("got response");
+      handleNewMessages(numNewMessages);
+      numNewMessages = bot.getUpdates(bot.last_message_received + 1);
+    }
+    lastTimeBotRan = millis();
+  }
+}
